@@ -11,6 +11,10 @@ from llama_index.core import (
 )
 from llama_index.core.retrievers import VectorIndexRetriever
 from llama_index.core.query_engine import RetrieverQueryEngine
+import sqlparse
+from sqlparse.sql import IdentifierList, Identifier
+from sqlparse.tokens import Keyword, DML
+from llama_index.llms.openai import OpenAI
 
 load_dotenv()
 
@@ -25,6 +29,26 @@ DATABASE = {
 app = Flask(__name__)
 
 
+def is_valid_sql_query(sql_query):
+    """
+    Check if the SQL query is valid.
+    
+    Args:
+        sql_query (str): The SQL query to be validated.
+    
+    Returns:
+        bool: True if the query is valid, False otherwise.
+    """
+    parsed = sqlparse.parse(sql_query)
+    if len(parsed) != 1:
+        return False
+    
+    stmt = parsed[0]
+    if not stmt.get_type() == 'UNKNOWN':
+        return True
+    return False
+
+
 def perform_sql_query(sql_query):
     """
     Execute a SQL query on the configured database.
@@ -35,6 +59,8 @@ def perform_sql_query(sql_query):
     Returns:
         tuple: A tuple containing the result of the query and a boolean indicating success.
     """
+    if not is_valid_sql_query(sql_query):
+        return None, False
 
     try:
         conn = psycopg2.connect(
@@ -72,7 +98,7 @@ def create_sql_query(query):
     Returns:
         str: The generated SQL query.
     """
-
+    llm = OpenAI(model="gpt-3.5-turbo", temperature=0)
     storage_context = StorageContext.from_defaults(persist_dir="./storage")
     index = load_index_from_storage(storage_context)
 
@@ -82,6 +108,7 @@ def create_sql_query(query):
     )
 
     response_synthesizer = get_response_synthesizer(
+        llm=llm,
         response_mode="tree_summarize",
     )
 
@@ -91,7 +118,7 @@ def create_sql_query(query):
     )
 
     response = query_engine.query(
-        f"Generate a strict POSTGRESQL query for the following: {query}"
+        f"Generate only POSTGRESQL query for the following, take care of conflicting data-types and do not hallucinate columns: {query}"
     )
 
     return str(response)
@@ -191,8 +218,7 @@ def answer():
                 else:
                     return jsonify({"response": "Failed to generate response", "sql_query": sql_query, "query_result": result}), 500
             else:
-                ans = straight_answer(question)
-                return jsonify({"response": ans}), 200
+                return jsonify({"response": "SQLQuery Failed", "sql_query": sql_query}), 500
         else:
             ans = straight_answer(question)
             return jsonify({"response": ans}), 200
