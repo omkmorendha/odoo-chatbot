@@ -143,6 +143,27 @@ def evaluate(question, sql_query, result):
         print(f"Error generating caption: {e}")
         return None
 
+def straight_answer(question):
+    try:
+        openai_client = openai.OpenAI(
+            api_key=os.environ.get("OPENAI_API_KEY"),
+        )
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": question},
+                {"role": "user", "content": ""},
+            ],
+            temperature=0.5,
+        )
+
+        gpt_output = response.choices[0].message.content
+
+        return str(gpt_output)
+    except Exception as e:
+        print(f"Error generating caption: {e}")
+        return None
+
 
 @app.route("/query", methods=["POST"])
 def answer():
@@ -170,10 +191,12 @@ def answer():
                 else:
                     return jsonify({"response": "Failed to generate response", "sql_query": sql_query, "query_result": result}), 500
             else:
-                return jsonify({"response": "SQL Query failed", "sql_query": sql_query}), 500
+                ans = straight_answer(question)
+                return jsonify({"response": ans}), 200
         else:
-            return jsonify({"response": "No need for query"}), 400
-
+            ans = straight_answer(question)
+            return jsonify({"response": ans}), 200
+        
     except Exception as e:
         print("Error:", e)
         return jsonify({"response": "Internal server error"}), 500
