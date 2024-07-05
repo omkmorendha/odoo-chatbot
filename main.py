@@ -26,6 +26,16 @@ app = Flask(__name__)
 
 
 def perform_sql_query(sql_query):
+    """
+    Execute a SQL query on the configured database.
+    
+    Args:
+        sql_query (str): The SQL query to be executed.
+    
+    Returns:
+        tuple: A tuple containing the result of the query and a boolean indicating success.
+    """
+
     try:
         conn = psycopg2.connect(
             dbname=DATABASE["NAME"],
@@ -53,6 +63,16 @@ def perform_sql_query(sql_query):
 
 
 def create_sql_query(query):
+    """
+    Create a SQL query using LlamaIndex and OpenAI based on a given query.
+    
+    Args:
+        query (str): The input query to generate a SQL query for.
+    
+    Returns:
+        str: The generated SQL query.
+    """
+
     storage_context = StorageContext.from_defaults(persist_dir="./storage")
     index = load_index_from_storage(storage_context)
 
@@ -78,6 +98,18 @@ def create_sql_query(query):
 
 
 def evaluate(question, sql_query, result):
+    """
+    Generate a natural language response to a SQL query result using OpenAI.
+    
+    Args:
+        question (str): The input question.
+        sql_query (str): The generated SQL query.
+        result (list): The result of the executed SQL query.
+    
+    Returns:
+        str: The generated response.
+    """
+        
     try:
         openai_client = openai.OpenAI(
             api_key=os.environ.get("OPENAI_API_KEY"),
@@ -114,6 +146,13 @@ def evaluate(question, sql_query, result):
 
 @app.route("/query", methods=["POST"])
 def answer():
+    """
+    Endpoint to handle query requests.
+    
+    Returns:
+        Response: A JSON response containing the generated answer, SQL query, and query result.
+    """
+
     try:
         data = request.get_json()
         question = data["query"]
