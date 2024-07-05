@@ -25,7 +25,8 @@ def load_database_config():
 
 def build_database_structure(database_config):
     """
-    Build the structure of the database including tables and their columns with data types.
+    Build the structure of the database including tables, their columns with data types,
+    and foreign key relationships.
 
     Args:
         database_config (dict): Database connection details.
@@ -57,7 +58,38 @@ def build_database_structure(database_config):
                 f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name='{table_name}'"
             )
             columns = cur.fetchall()
-            database_structure[table_name] = {col[0]: col[1] for col in columns}
+
+            cur.execute(
+                f"""
+                SELECT
+                    kcu.column_name,
+                    ccu.table_name AS foreign_table_name,
+                    ccu.column_name AS foreign_column_name
+                FROM
+                    information_schema.table_constraints AS tc
+                    JOIN information_schema.key_column_usage AS kcu
+                      ON tc.constraint_name = kcu.constraint_name
+                      AND tc.table_schema = kcu.table_schema
+                    JOIN information_schema.constraint_column_usage AS ccu
+                      ON ccu.constraint_name = tc.constraint_name
+                WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_name='{table_name}';
+                """
+            )
+            foreign_keys = cur.fetchall()
+
+            column_info = {col[0]: col[1] for col in columns}
+            fk_info = [
+                {
+                    "column": fk[0],
+                    "references_table": fk[1],
+                    "references_column": fk[2],
+                }
+                for fk in foreign_keys
+            ]
+            database_structure[table_name] = {
+                "columns": column_info,
+                "foreign_keys": fk_info,
+            }
 
     except (Exception, psycopg2.DatabaseError) as error:
         print(f"Error: {error}")
@@ -79,8 +111,19 @@ def create_nodes_from_structure(database_structure):
         list: A list of nodes for indexing.
     """
     nodes = []
-    for table_name, columns in database_structure.items():
+    for table_name, table_info in database_structure.items():
+        columns = table_info["columns"]
+        foreign_keys = table_info["foreign_keys"]
+
         content = f"Table: {table_name}\nColumns: {', '.join(f'{col}: {data_type}' for col, data_type in columns.items())}"
+        
+        if foreign_keys:
+            fk_content = "\nForeign Keys:\n" + "\n".join(
+                f"{fk['column']} -> {fk['references_table']}({fk['references_column']})"
+                for fk in foreign_keys
+            )
+            content += fk_content
+
         nodes.append(Node(text=content))
     return nodes
 
