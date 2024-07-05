@@ -11,7 +11,6 @@ from llama_index.core import (
 )
 from llama_index.core.retrievers import VectorIndexRetriever
 from llama_index.core.query_engine import RetrieverQueryEngine
-from langchain_community.utilities import SQLDatabase
 
 load_dotenv()
 
@@ -74,7 +73,6 @@ def create_sql_query(query):
     response = query_engine.query(
         f"Generate a strict POSTGRESQL query for the following: {query}"
     )
-    print(response)
 
     return str(response)
 
@@ -100,22 +98,7 @@ def evaluate(question, sql_query, result):
                 {"role": "system", "content": prompt},
                 {
                     "role": "user",
-                    "content": """
-                    Given the following question:
-                    What is the total value of all the sales?
-                    
-
-                    The generated SQL Query:
-                    SELECT SUM(amount) AS total_sales_value FROM sale_advance_payment_inv
-                    
-
-                    and the following result from the query:
-                    [(32,)]
-                    
-
-                    Response:
-                    There were $320 dollars of sales
-                 """,
+                    "content": "",
                 },
             ],
             temperature=0.5,
@@ -137,24 +120,24 @@ def answer():
 
         sql_query = create_sql_query(question)
 
-        if sql_query != "None":
+        if sql_query:
             result, stat = perform_sql_query(sql_query)
 
             if stat:
                 final_response = evaluate(question, sql_query, result)
 
                 if final_response:
-                    return jsonify({"response": final_response}), 200
+                    return jsonify({"response": final_response, "sql_query": sql_query, "query_result": result}), 200
                 else:
-                    return jsonify({"error": "Failed to generate response"}), 500
+                    return jsonify({"response": "Failed to generate response", "sql_query": sql_query, "query_result": result}), 500
             else:
-                return jsonify({"error": "SQL Query failed"}), 500
+                return jsonify({"response": "SQL Query failed", "sql_query": sql_query}), 500
         else:
-            return jsonify({"error": "No need for query"}), 400
+            return jsonify({"response": "No need for query"}), 400
 
     except Exception as e:
         print("Error:", e)
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"response": "Internal server error"}), 500
 
 
 if __name__ == "__main__":
