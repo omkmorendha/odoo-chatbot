@@ -1,8 +1,14 @@
+from flask import Flask, request, jsonify
 import psycopg2
 import os
 from dotenv import load_dotenv
 import openai
-from llama_index.core import VectorStoreIndex, get_response_synthesizer, load_index_from_storage, StorageContext
+from llama_index.core import (
+    VectorStoreIndex,
+    get_response_synthesizer,
+    load_index_from_storage,
+    StorageContext,
+)
 from llama_index.core.retrievers import VectorIndexRetriever
 from llama_index.core.query_engine import RetrieverQueryEngine
 from langchain_community.utilities import SQLDatabase
@@ -10,36 +16,38 @@ from langchain_community.utilities import SQLDatabase
 load_dotenv()
 
 DATABASE = {
-    'NAME': os.environ.get("DB_NAME"),
-    'USER': os.environ.get("DB_USER"),
-    'PASSWORD': os.environ.get("DB_PASSWORD"),
-    'HOST': os.environ.get("DB_HOST"),
-    'PORT': int(os.environ.get("DB_PORT")),
+    "NAME": os.environ.get("DB_NAME"),
+    "USER": os.environ.get("DB_USER"),
+    "PASSWORD": os.environ.get("DB_PASSWORD"),
+    "HOST": os.environ.get("DB_HOST"),
+    "PORT": int(os.environ.get("DB_PORT")),
 }
+
+app = Flask(__name__)
 
 
 def perform_sql_query(sql_query):
     try:
         conn = psycopg2.connect(
-            dbname=DATABASE['NAME'],
-            user=DATABASE['USER'],
-            password=DATABASE['PASSWORD'],
-            host=DATABASE['HOST'],
-            port=DATABASE['PORT']
+            dbname=DATABASE["NAME"],
+            user=DATABASE["USER"],
+            password=DATABASE["PASSWORD"],
+            host=DATABASE["HOST"],
+            port=DATABASE["PORT"],
         )
-        
+
         cursor = conn.cursor()
         cursor.execute(sql_query)
-        
+
         result = cursor.fetchall()
-        
+
         conn.commit()
-        
+
         cursor.close()
         conn.close()
-        
+
         return result, True
-    
+
     except Exception as e:
         print(f"Error executing SQL query: {e}")
         return None, False
@@ -63,13 +71,15 @@ def create_sql_query(query):
         response_synthesizer=response_synthesizer,
     )
 
-    response = query_engine.query(f"Generate a strict POSTGRESQL query for the following: {query}")
+    response = query_engine.query(
+        f"Generate a strict POSTGRESQL query for the following: {query}"
+    )
     print(response)
 
     return str(response)
 
 
-def evalute(question, sql_query, result):
+def evaluate(question, sql_query, result):
     try:
         openai_client = openai.OpenAI(
             api_key=os.environ.get("OPENAI_API_KEY"),
@@ -88,8 +98,9 @@ def evalute(question, sql_query, result):
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": prompt},
-                {"role": "user", "content": 
-                 """
+                {
+                    "role": "user",
+                    "content": """
                     Given the following question:
                     What is the total value of all the sales?
                     
@@ -104,7 +115,8 @@ def evalute(question, sql_query, result):
 
                     Response:
                     There were $320 dollars of sales
-                 """},
+                 """,
+                },
             ],
             temperature=0.5,
         )
@@ -117,55 +129,33 @@ def evalute(question, sql_query, result):
         return None
 
 
-def straight_answer(question):
+@app.route("/query", methods=["POST"])
+def answer():
     try:
-        openai_client = openai.OpenAI(
-            api_key=os.environ.get("OPENAI_API_KEY"),
-        )
+        data = request.get_json()
+        question = data["query"]
 
-        response = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": question},
-                {"role": "user", "content": ""},
-            ],
-            temperature=0.5,
-        )
-
-        gpt_output = response.choices[0].message.content
-
-        return str(gpt_output)
-    except Exception as e:
-        print(f"Error generating caption: {e}")
-        return None
-
-
-def answer(question):
-    try:
         sql_query = create_sql_query(question)
 
-        if sql_query != 'None':
+        if sql_query != "None":
             result, stat = perform_sql_query(sql_query)
 
             if stat:
-                print(result)
-                final_response = evalute(question, sql_query, result)
+                final_response = evaluate(question, sql_query, result)
 
                 if final_response:
-                    print(final_response)
-
+                    return jsonify({"response": final_response}), 200
+                else:
+                    return jsonify({"error": "Failed to generate response"}), 500
             else:
-                print("SQL Query failed")
-        
+                return jsonify({"error": "SQL Query failed"}), 500
         else:
-            print("No need for query")
-            resp = straight_answer(question)
-            print(resp)
-    
+            return jsonify({"error": "No need for query"}), 400
+
     except Exception as e:
-        print("error: ", e)
-        resp = straight_answer(question)
-        print(resp)
+        print("Error:", e)
+        return jsonify({"error": "Internal server error"}), 500
 
 
-answer("How many tables are there in the database total?")
+if __name__ == "__main__":
+    app.run(debug=True)
