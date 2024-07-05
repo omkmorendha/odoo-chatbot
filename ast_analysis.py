@@ -55,7 +55,18 @@ def build_database_structure(database_config):
         for table in tables:
             table_name = table[0]
             cur.execute(
-                f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name='{table_name}'"
+                f"""
+                SELECT
+                    column_name,
+                    data_type,
+                    is_nullable,
+                    column_default,
+                    character_maximum_length
+                FROM
+                    information_schema.columns
+                WHERE
+                    table_name='{table_name}'
+                """
             )
             columns = cur.fetchall()
 
@@ -72,12 +83,23 @@ def build_database_structure(database_config):
                       AND tc.table_schema = kcu.table_schema
                     JOIN information_schema.constraint_column_usage AS ccu
                       ON ccu.constraint_name = tc.constraint_name
-                WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_name='{table_name}';
+                WHERE
+                    tc.constraint_type = 'FOREIGN KEY'
+                    AND tc.table_name='{table_name}'
                 """
             )
             foreign_keys = cur.fetchall()
 
-            column_info = {col[0]: col[1] for col in columns}
+            column_info = [
+                {
+                    "name": col[0],
+                    "data_type": col[1],
+                    "is_nullable": col[2],
+                    "default": col[3],
+                    "max_length": col[4],
+                }
+                for col in columns
+            ]
             fk_info = [
                 {
                     "column": fk[0],
@@ -115,7 +137,11 @@ def create_nodes_from_structure(database_structure):
         columns = table_info["columns"]
         foreign_keys = table_info["foreign_keys"]
 
-        content = f"Table: {table_name}\nColumns: {', '.join(f'{col}: {data_type}' for col, data_type in columns.items())}"
+        column_descriptions = [
+            f"{col['name']} ({col['data_type']}, nullable: {col['is_nullable']}, default: {col['default']}, max_length: {col['max_length']})"
+            for col in columns
+        ]
+        content = f"Table: {table_name}\nColumns:\n" + "\n".join(column_descriptions)
         
         if foreign_keys:
             fk_content = "\nForeign Keys:\n" + "\n".join(
