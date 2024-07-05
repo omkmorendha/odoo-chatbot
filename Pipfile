@@ -8,6 +8,9 @@ flask = "*"
 psycopg2-binary = "*"
 python-dotenv = "*"
 llama-index = "*"
+langchain = "*"
+langchain-community = "*"
+langchain-cli = "*"
 
 [dev-packages]
 
