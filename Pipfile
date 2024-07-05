@@ -12,6 +12,8 @@ langchain = "*"
 langchain-community = "*"
 langchain-cli = "*"
 sqlparse = "*"
+streamlit = "*"
+requests = "*"
 
 [dev-packages]
 
