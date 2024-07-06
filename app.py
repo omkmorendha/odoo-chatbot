@@ -18,8 +18,6 @@ if st.button("Submit"):
             if response.status_code == 200:
                 data = response.json()
                 st.write("Response:", data.get("response"))
-                st.write("SQL Query:", data.get("sql_query"))
-                st.write("Query Result:", data.get("query_result"))
             else:
                 st.write("Error:", response.json().get("response"))
         except Exception as e:

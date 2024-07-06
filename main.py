@@ -118,7 +118,43 @@ def create_sql_query(query):
     )
 
     response = query_engine.query(
-        f"Generate only POSTGRESQL query for the following, take care of conflicting data-types and do not hallucinate columns: {query}"
+        f"Generate only POSTGRESQL query for the following, take care of conflicting data-types and strictly abide to only the columns present: {query}"
+    )
+
+    return str(response)
+
+
+def fix_sql_query(question, query):
+    """
+    Create a SQL query using LlamaIndex and OpenAI based on a given query.
+    
+    Args:
+        query (str): The input query to generate a SQL query for.
+    
+    Returns:
+        str: The generated SQL query.
+    """
+    llm = OpenAI(model="gpt-3.5-turbo", temperature=0)
+    storage_context = StorageContext.from_defaults(persist_dir="./storage")
+    index = load_index_from_storage(storage_context)
+
+    retriever = VectorIndexRetriever(
+        index=index,
+        similarity_top_k=2,
+    )
+
+    response_synthesizer = get_response_synthesizer(
+        llm=llm,
+        response_mode="tree_summarize",
+    )
+
+    query_engine = RetrieverQueryEngine(
+        retriever=retriever,
+        response_synthesizer=response_synthesizer,
+    )
+
+    response = query_engine.query(
+        f"Generate only POSTGRESQL query to fix this: {query}, take care of conflicting data-types and do not hallucinate columns for the given question: {question}"
     )
 
     return str(response)
@@ -181,7 +217,7 @@ def straight_answer(question):
                 {"role": "system", "content": question},
                 {"role": "user", "content": ""},
             ],
-            temperature=0.5,
+            temperature=0.7,
         )
 
         gpt_output = response.choices[0].message.content
@@ -216,9 +252,35 @@ def answer():
                 if final_response:
                     return jsonify({"response": final_response, "sql_query": sql_query, "query_result": result}), 200
                 else:
-                    return jsonify({"response": "Failed to generate response", "sql_query": sql_query, "query_result": result}), 500
+                    sql_query_new = fix_sql_query(question, sql_query)
+                    result, stat = perform_sql_query(sql_query_new)
+
+                    if stat:
+                        final_response = evaluate(question, sql_query, result)       
+
+                        if final_response:
+                            return jsonify({"response": final_response, "sql_query": sql_query, "query_result": result}), 200
+                        else:
+                            return jsonify({"response": "Failed to generate response", "sql_query": sql_query, "query_result": result}), 500    
+                    else:
+                        print(sql_query_new)
+                        return jsonify({"response": "Failed to generate response"}), 500
+            
             else:
-                return jsonify({"response": "SQLQuery Failed", "sql_query": sql_query}), 500
+                sql_query_new = fix_sql_query(question, sql_query)
+                result, stat = perform_sql_query(sql_query_new)
+
+                if stat:
+                    final_response = evaluate(question, sql_query, result)       
+
+                    if final_response:
+                        return jsonify({"response": final_response, "sql_query": sql_query, "query_result": result}), 200
+                    else:
+                        return jsonify({"response": "Failed to generate response", "sql_query": sql_query, "query_result": result}), 500        
+
+                else:
+                    print(sql_query_new)
+                    return jsonify({"response": "Failed to generate response"}), 500 
         else:
             ans = straight_answer(question)
             return jsonify({"response": ans}), 200
