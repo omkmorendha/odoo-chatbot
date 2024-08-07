@@ -16,18 +16,24 @@ DATABASE = {
     "PORT": int(os.environ.get("DB_PORT")),
 }
 
+print(DATABASE)
 db = SQLDatabase.from_uri(f"postgresql://{DATABASE['USER']}:{DATABASE['PASSWORD']}@{DATABASE['HOST']}:{DATABASE['PORT']}/{DATABASE['NAME']}")
 toolkit = SQLDatabaseToolkit(db=db, llm=ChatOpenAI(temperature=0))
 context = toolkit.get_context()
 tools = toolkit.get_tools()
 
 custom_messages = [
-    HumanMessagePromptTemplate.from_template("Answer the following query based on the ODOO database with information provided: {input}"),
+    HumanMessagePromptTemplate.from_template("Answer the following query based on the database with information provided: {input}"),
     AIMessage(content="{SQL_FUNCTIONS_SUFFIX}"),
     MessagesPlaceholder(variable_name="agent_scratchpad"),
 ]
 custom_prompt = ChatPromptTemplate.from_messages(custom_messages)
 custom_prompt = custom_prompt.partial(**context)
+
+llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
+agent = create_openai_tools_agent(llm, tools, custom_prompt)
+agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+
 
 @app.route('/query', methods=['POST'])
 def query():
@@ -36,10 +42,6 @@ def query():
 
     if not user_query:
         return jsonify({'error': 'Query is required'}), 400
-
-    llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
-    agent = create_openai_tools_agent(llm, tools, custom_prompt)
-    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
     response = agent_executor.invoke({"input": user_query})
     return jsonify({'response': response})
