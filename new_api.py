@@ -16,7 +16,6 @@ DATABASE = {
     "PORT": int(os.environ.get("DB_PORT")),
 }
 
-print(DATABASE)
 db = SQLDatabase.from_uri(f"postgresql://{DATABASE['USER']}:{DATABASE['PASSWORD']}@{DATABASE['HOST']}:{DATABASE['PORT']}/{DATABASE['NAME']}")
 toolkit = SQLDatabaseToolkit(db=db, llm=ChatOpenAI(temperature=0))
 context = toolkit.get_context()
